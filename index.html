@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>DJ Симулятор</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#14122e;--card:#221e4d;--ac:#9b3cff;--ac2:#ff3dcb;--tx:#f4f0ff;--mu:#a49dd4;--ok:#3ddc97;--bad:#ff5a6e;--yl:#ffd23d}
+*{box-sizing:border-box;touch-action:manipulation}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--tx);font-family:'Pixelify Sans',monospace;-webkit-user-select:none;user-select:none}
+#app{max-width:480px;margin:0 auto;padding:calc(10px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom))}
+.card{background:var(--card);border-radius:12px;padding:12px;margin:8px 0;line-height:1.35}
+button{font:inherit;color:var(--tx);background:linear-gradient(90deg,var(--ac),var(--ac2));border:0;border-radius:10px;padding:13px;width:100%;margin:5px 0;font-size:16px}
+button.g{background:#35306f}button:disabled{opacity:.4}
+button:focus-visible,input:focus-visible{outline:2px solid var(--yl)}
+.row{display:flex;gap:6px}.row>*{flex:1}
+.bar{height:10px;background:#0d0b21;border-radius:5px;overflow:hidden;margin-top:2px}
+.bar i{display:block;height:100%;background:var(--ac);width:0}
+.st{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;margin-top:6px}
+h2{margin:4px 0 8px}.mu{color:var(--mu);font-size:13px}
+.splash{position:fixed;inset:0;background:#14122e url(splash.png) center/cover no-repeat;display:flex;flex-direction:column;justify-content:flex-end;padding:0 28px calc(36px + env(safe-area-inset-bottom))}
+.splash button{background:rgba(155,60,255,.88);border:2px solid var(--ac2)}
+.splash button.g{background:rgba(20,18,46,.85)}
+input{font:inherit;width:100%;padding:12px;border-radius:10px;border:2px solid var(--ac);background:#0d0b21;color:var(--tx);font-size:18px;margin:8px 0}
+.tap{height:130px;font-size:22px;margin:10px 0}
+</style></head><body><div id="app"></div>
+<script>
+const tg=window.Telegram&&Telegram.WebApp;try{tg.ready();tg.expand();tg.setHeaderColor('#14122e');tg.setBackgroundColor('#14122e')}catch(e){}
+const $=id=>document.getElementById(id),app=$('app'),K='djsim_v1';
+const R=(a,b)=>a+Math.floor(Math.random()*(b-a+1)),C=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
+const al=t=>tg&&tg.showAlert?tg.showAlert(t):alert(t);
+const TAPS=80; // тапов на 8-часовой сет (настройка баланса)
+const HEAD=[['Бидон BD-30',3000],['Зенхайзер Зенит HD-45',4500],['Бейер-Динамит DT-700',6000],['Аудио-Тётя ATH-M50 Про',7500],['Пионерчик HDJ-X10',9000]];
+const LAP=[['Тошибка Сателлит б/у',30000],['Ленивое ThinkПуд E14',55000],['Азус ВивоКнига Про',90000],['Яблочко МакКнига Эйр',140000],['Яблочко МакКнига Макс Ультра',300000]];
+const GEN=['Блатняк / шансон','Попса 90-х','Русская попса','Рок-хиты'];
+const CL=[
+{id:0,n:'Рюмочная «Сельдь и веселье»',pay:1500,dg:5,tip:500,tp:.1,ad:.05,pref:[90,75,40,45],d:'Гопники и алкаши. Очень опасно. 22:00–06:00'},
+{id:1,n:'Бар «Разведёнка и щегол»',pay:2000,dg:4,tip:1500,tp:.25,ad:.1,pref:[70,85,55,50],d:'Колхозный бар, пьяные гопники. Опасно. 22:00–06:00'},
+{id:2,n:'Ресторан «Дроздинка»',pay:3000,dg:3,tip:5000,tp:.4,ad:.3,pref:[30,65,90,70],d:'Весёлые пьяные люди. Средне. 22:00–06:00',need:s=>s.rep>=40&&s.vos>=25&&s.sets>=5,nt:'Нужно: репутация 40, востребованность 25, 5 сетов'}];
+const SG=[['Круг — «Владимирский централ»','Сектор Газа — «Туман»','Король и Шут — «Лесник»'],['Ласковый Май — «Белые розы»','Руки Вверх — «Крошка моя»','Кино — «Группа крови»'],['Руки Вверх — «А он тебя целует»','Дискотека Авария — «Если б я был султан»','Грибы — «Тает лёд»']];
+const GR=['Хреново','Ну так, не очень','Нормуль','Хорошо','Отлично'],GM=[.5,.8,1,1.15,1.3],GREP=[-5,-1,1,3,5],GFAV=[-5,0,1,4,7],GVOS=[-2,0,0,2,3];
+const DEF=()=>({v:1,name:'',city:'Задрыпинск',day:1,slot:0,money:50000,skill:0,rep:30,vos:5,fav:0,tired:0,hp:100,sets:0,head:0,lap:0,brawler:0});
+let S=null,T=null,SV=null,EC=[];
+function save(){if(!S)return;const j=JSON.stringify(S);try{localStorage.setItem(K,j)}catch(e){}try{tg.CloudStorage.setItem(K,j)}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});
+function boot(){let l=null;try{l=JSON.parse(localStorage.getItem(K))}catch(e){}
+ if(l||!(tg&&tg.CloudStorage))return splash(l);
+ tg.CloudStorage.getItem(K,(e,v)=>{let o=null;try{o=JSON.parse(v)}catch(x){}splash(o)})}
+function splash(l){SV=l;app.innerHTML=`<div class="splash">${l?`<button onclick="cont()">Продолжить: ${l.name}, день ${l.day}</button><button class="g" onclick="nameScr()">Новая игра</button>`:`<button onclick="nameScr()">Начать</button>`}</div>`}
+function cont(){S=Object.assign(DEF(),SV);menu()}
+function nameScr(){app.innerHTML=`<div class="card"><h2>Как тебя звать на сцене?</h2><div class="mu">Это будет твой ник на протяжении всей игры.</div><input id="nm" maxlength="16" placeholder="DJ ..."><button onclick="go()">Поехали</button></div>`}
+function go(){const n=$('nm').value.trim()||'DJ Безымянный';S=DEF();S.name=n;menu(`Добро пожаловать в Задрыпинск, ${n}! В кармане 50 000 ₽. Нужны ноутбук и наушники — загляни в магазин, потом в рюмочную.`)}
+const eq=()=>(S.head+S.lap)/2*20;
+const Q=()=>C(.3*S.skill+.25*eq()+.2*80+.15*(100-S.tired)+.1*50-(T&&T.dr>60?10:0));
+const bar=(l,v,c)=>`<div>${l} ${Math.round(v)}<div class="bar"><i style="width:${C(v)}%;${c?'background:'+c:''}"></i></div></div>`;
+function hdr(){return `<div class="card"><div class="row"><b>${S.name}</b><span style="text-align:right">${S.money.toLocaleString('ru')} ₽</span></div><div class="mu">${S.city} · день ${S.day} · ${['день','вечер','ночь'][S.slot]}</div><div class="st">${bar('Навыки',S.skill)}${bar('Репутация',S.rep)}${bar('Востребованность',S.vos)}${bar('Любимчик публики',S.fav)}${bar('Усталость',S.tired,'#ff5a6e')}${bar('Здоровье',S.hp,'#3ddc97')}${bar('Качество работы',Q(),'#ffd23d')}</div></div>`}
+function menu(msg){T=null;save();const n=S.slot==2;
+ app.innerHTML=hdr()+(msg?`<div class="card">${msg}</div>`:'')+`<div class="card"><b>Что делаем?</b>`+(n?`<button onclick="clubs()">Играть сет</button><button class="g" onclick="act('rest')">Отоспаться (усталость −40)</button>`:`<button onclick="act('learn')">Учиться самому (навык +1, усталость +15)</button><button class="g" onclick="act('job')">Подработка: грузчик, +1 200 ₽</button><button class="g" onclick="act('rest')">Отдохнуть (усталость −25)</button>`)+`<button class="g" onclick="shop()">Магазин</button></div><button class="g" onclick="quit()">Бросить карьеру диджея</button>`}
+function act(a){let m='';
+ if(a=='learn'){if(S.skill>=40)return menu('Самообучение упёрлось в потолок (навык 40). Дальше нужна школа.');S.skill+=1;S.tired=C(S.tired+15);m='Весь вечер разбирал сведение по видео. Навык +1.'}
+ if(a=='job'){S.money+=1200;S.tired=C(S.tired+20);m='Таскал ящики на рынке. +1 200 ₽, усталость +20.'}
+ if(a=='rest'){S.tired=C(S.tired-(S.slot==2?40:25));m='Выспался. Стало легче.'}
+ next(m)}
+function next(m){S.slot++;if(S.slot>2){S.slot=0;S.day++;S.money-=300;m+='<br>Еда за день: −300 ₽.';if(S.money<0){S.money=0;S.hp=C(S.hp-8);m+=' Денег на еду не хватило: здоровье −8.'}
+ S.tired=C(S.tired-10);S.hp=C(S.hp+3);const t=C(.35*Q()+.25*S.rep+.1*S.fav);S.vos=C(S.vos+Math.sign(t-S.vos)*Math.min(1,Math.abs(t-S.vos)));if(S.hp<=0)return end('hp')}
+ menu(m)}
+function shop(msg){const row=(t,a,k)=>`<div class="card"><b>${t}</b>`+a.map((x,i)=>{const own=S[k]==i+1,low=S[k]>i+1;return `<div class="row" style="align-items:center;margin:6px 0"><div style="flex:2">${x[0]}<div class="mu">${x[1].toLocaleString('ru')} ₽ · ступень ${i+1}</div></div><button style="margin:0" class="${own||low?'g':''}" ${own||low||S.money<x[1]?'disabled':''} onclick="buy('${k}',${i})">${own?'Есть':low?'—':'Купить'}</button></div>`}).join('')+'</div>';
+ app.innerHTML=hdr()+(msg?`<div class="card">${msg}</div>`:'')+row('Наушники',HEAD,'head')+row('Ноутбуки',LAP,'lap')+`<button class="g" onclick="menu()">Назад</button>`}
+function buy(k,i){const a=k=='head'?HEAD:LAP;if(S.money<a[i][1])return;S.money-=a[i][1];S[k]=i+1;save();shop('Куплено: '+a[i][0])}
+function clubs(){if(!S.head||!S.lap)return menu('Без ноутбука и наушников сет не сыграть. Загляни в магазин.');
+ if(S.tired>=80)return menu('Усталость 80+: ты вынужден отказаться от сета. Отдохни.');
+ app.innerHTML=hdr()+`<h2>Куда идём играть?</h2>`+CL.map(c=>{const ok=!c.need||c.need(S);return `<div class="card"><b>${c.n}</b><div class="mu">${c.d}<br>Оплата ${c.pay} ₽ · опасность ${c.dg}/5</div>${ok?`<button onclick="start(${c.id})">Играть</button>`:`<div class="mu">Закрыто. ${c.nt}</div>`}</div>`}).join('')+`<button class="g" onclick="menu()">Назад</button>`}
+function start(i){T={c:CL[i],tap:0,tot:TAPS,mood:50,g:0,tk:0,low:0,dr:0,ad:70,ms:[],tips:0,cd:0,ch:0,lock:0};setUI()}
+function setUI(){T.lock=0;app.innerHTML=`<div class="card"><b>${T.c.n}</b><div class="mu" id="hh"></div></div><div class="card">СЕТ<div class="bar"><i id="pb"></i></div><div style="margin-top:10px">НАСТРОЕНИЕ ТАНЦПОЛА <span id="mv"></span><div class="bar"><i id="mb"></i></div></div></div><div class="card"><div class="mu">Что играем:</div><div class="row" style="flex-wrap:wrap" id="gs"></div></div><button class="tap" id="tp">ТАПАЙ: играть сет</button><div class="row"><button class="g" onclick="barMenu()">К бару</button><button class="g" onclick="fun()">Отчибучить</button></div>`;
+ $('gs').innerHTML=GEN.map((g,i)=>`<button class="${i==T.g?'':'g'}" style="flex:1 1 45%;font-size:13px;padding:9px" onclick="gen(${i})">${g}</button>`).join('');upd();$('tp').onpointerdown=tapIt}
+function gen(i){T.g=i;setUI()}
+function upd(){const hr=(22+Math.floor(T.tap/T.tot*8))%24;$('hh').textContent=`${String(hr).padStart(2,'0')}:00 · усталость ${Math.round(S.tired)} · опьянение ${Math.round(T.dr)}`;$('pb').style.width=T.tap/T.tot*100+'%';$('mv').textContent=Math.round(T.mood);const m=$('mb');m.style.width=T.mood+'%';m.style.background=T.mood<25?'#ff5a6e':T.mood<60?'#ffd23d':'#3ddc97'}
+function tapIt(e){e.preventDefault();if(!T||T.lock)return;try{tg.HapticFeedback.impactOccurred('light')}catch(x){}T.tap++;if(T.tap>=T.tot)return finish('ok');const s=T.tot/10;if(Math.floor(T.tap/s)>Math.floor((T.tap-1)/s))tick();else upd()}
+function tick(){const t=T;t.tk++;if(t.cd>0)t.cd--;
+ t.mood=C(t.mood+(t.c.pref[t.g]-50)/5+(Q()-50)/10+S.fav/20-(S.tired>80?4:0)-(t.dr>85?5:0)+R(-3,3));t.ms.push(t.mood);
+ if(t.mood<25)t.low++;else t.low=0;
+ if(t.mood<10)return finish('fired');
+ if(t.low>=2){t.low=0;if(t.c.dg>=3){S.hp=C(S.hp-8);return ev({x:'Зал недоволен, и в тебя летит стакан! Здоровье −8.',c:[['Ну ладно',()=>'Смени жанр, пока не стало хуже.']]})}}
+ if(t.tk<10&&Math.random()<.55)return randEv();upd()}
+function ev(o){T.lock=1;EC=o.c;app.innerHTML=`<div class="card"><h2>Событие</h2><div>${o.x}</div></div>`+o.c.map((c,i)=>`<button class="${i?'g':''}" onclick="pick(${i})">${c[0]}</button>`).join('')}
+function pick(i){const r=EC[i][1]()||'';if(S.hp<=0)return end('hp');if(T.abort)return finish('abort');app.innerHTML=`<div class="card">${r}</div><button onclick="setUI()">Дальше</button>`}
+function drink(c,d,tr){if(S.money<c)return 'Не хватает денег.';S.money-=c;T.dr=C(T.dr+d);S.tired=C(S.tired-tr);T.mood=C(T.mood+3);return 'Взял. Бодрости прибавилось.'}
+function barMenu(){if(T.lock)return;ev({x:'У барной стойки. Что берёшь?',c:[['Пиво, 300 ₽',()=>drink(300,8,5)],['Шот водки, 400 ₽',()=>drink(400,15,8)],['Энергетик «Бык Красный», 250 ₽',()=>drink(250,0,15)],['Вернуться за пульт',()=>'Ты вернулся к пульту.']]})}
+function fun(){if(T.lock)return;if(T.cd>0||T.ch>=3)return al('Рано: публика ещё не отошла от прошлой выходки (кулдаун 2 тика, максимум 3 за сет).');
+ ev({x:'Отчибучить! Что делаем?',c:[['Встать на пульт и станцевать',()=>{T.cd=2;T.ch++;T.mood=C(T.mood+20);S.fav=C(S.fav+3);let m='Зал визжит! Настроение +20, любимчик +3.';if(Math.random()<.1){S.hp=C(S.hp-10);m+=' Чуть не упал: здоровье −10.'}if(Math.random()<.2+T.c.ad){S.rep=C(S.rep-5);T.ad-=25;m+=' Арт-директор видел: репутация −5.'}return m}],['Крикнуть в микрофон «Привет, '+S.city+'!»',()=>{T.cd=2;T.ch++;T.mood=C(T.mood+8);S.fav=C(S.fav+1);return 'Зал отозвался. Настроение +8.'}],['Передумать',()=>'Ты сделал вид, что так и задумано.']]})}
+function tipEv(){const a=R(500,Math.max(500,T.c.tip));return {x:`Гость суёт тебе ${a} ₽ «на чай» и шепчет заказ.`,c:[['Взять',()=>{S.money+=a;T.tips+=a;if(Math.random()<T.c.ad){const f=Math.round(a*.2);S.money=Math.max(0,S.money-f);T.ad-=30;S.rep=C(S.rep-5);S.vos=C(S.vos-3);return `Арт-директор всё видел! Штраф ${f} ₽, репутация −5, востребованность −3.`}return `Взял ${a} ₽. Никто не заметил.`}],['Не брать',()=>{S.rep=C(S.rep+1);S.fav=C(S.fav+1);return 'Отказался от чаевых. Репутация +1, любимчик +1.'}]]}}
+const EVS=[
+{m:0,f:()=>({x:T.c.dg>=4?'Мужик в тельняшке протягивает рюмку: «Диджей, давай по-братски!»':'Гость угощает шотом: «За твой сет!»',c:[['Выпить',()=>{T.dr=C(T.dr+15);T.mood=C(T.mood+5);S.fav=C(S.fav+1);return 'Выпил. Зал одобрил. Опьянение +15.'}],['Вежливо отказаться',()=>{if(T.c.dg>=4&&Math.random()<.25){T.mood=C(T.mood-6);return 'Мужик обиделся: «Брезгуешь?!» Настроение зала просело.'}return 'Отказался вежливо. Все поняли.'}]]})},
+{m:0,f:()=>{const s=SG[Math.min(T.c.id,2)][R(0,2)];return {x:`Гость просит поставить: ${s}`,c:[['Поставить заказ',()=>{T.mood=C(T.mood+10);S.fav=C(S.fav+1);if(Math.random()<T.c.ad*.5){S.vos=C(S.vos-2);return 'Зал доволен, но арт-директор поморщился: востребованность −2.'}return 'Зал подхватил! Настроение +10.'}],['Отказать',()=>{T.mood=C(T.mood-2);return 'Гость махнул рукой.'}]]}}},
+{m:0,lap:1,f:()=>({x:'Тошибка зависла прямо посреди микса!',c:[['Перезагрузить',()=>{T.mood=C(T.mood-10);return 'Минута тишины. Настроение −10.'}],['Быстро жать на всё подряд',()=>{if(Math.random()<.5)return 'Сработало, никто не заметил.';T.mood=C(T.mood-15);return 'Не помогло. Настроение −15.'}]]})},
+{m:3,f:()=>({x:'В диджея летит бутылка!',c:[['Пригнуться',()=>{if(Math.random()<.45+S.skill/200)return 'Бутылка просвистела мимо!';S.hp=C(S.hp-10);S.money=Math.max(0,S.money-700);return 'Попало в плечо. Здоровье −10, аптека −700 ₽.'}],['Поймать на лету',()=>{if(Math.random()<.25){T.mood=C(T.mood+15);S.fav=C(S.fav+3);return 'Поймал! Зал ревёт. Любимчик +3.'}S.hp=C(S.hp-15);return 'Не поймал. Здоровье −15.'}]]})},
+{m:3,f:()=>({x:'Пьяный посетитель лезет драться с диджеем.',c:[['Драться',()=>{if(Math.random()<.4+S.hp/250){S.rep=C(S.rep-5);S.brawler=1;T.mood=C(T.mood+5);return 'Победил, но хозяин хмурится. Репутация −5, пошёл слух о «драчуне».'}S.hp=C(S.hp-25);S.money=Math.max(0,S.money-1000);return 'Тебя отметелили. Здоровье −25, −1 000 ₽.'}],['Не драться',()=>{S.rep=C(S.rep+1);return 'Сохранил здоровье и лицо. Репутация +1.'}]]})},
+{m:3,f:()=>({x:'Подвыпившая гостья явно не прочь продолжить вечер вместе.',c:[['Вежливо отказать',()=>{S.rep=C(S.rep+1);return 'Отказал вежливо. Всё ок. Репутация +1.'}],['Уйти с ней, бросив сет',()=>{T.abort=1;S.rep=C(S.rep-10);return ''}],['Дождаться конца и поехать вместе',()=>{T.late=1;return 'Договорились после сета.'}]]})}];
+function randEv(){const r=Math.random(),c=T.c;if(r<.1)return wc();if(r<.1+c.tp*.35)return ev(tipEv());const P=EVS.filter(e=>c.dg>=e.m&&(!e.lap||S.lap==e.lap));ev(P[R(0,P.length-1)].f())}
+function wc(){T.lock=1;let n=0;const need=14,t0=Date.now();
+ app.innerHTML=`<div class="card"><h2>Приспичило!</h2><div class="mu">Тапай как можно быстрее, пока шкала не ушла!</div><div class="bar" style="height:22px"><i id="wb" style="background:#ffd23d"></i></div></div><button class="tap" id="wt">БЕЖАТЬ!</button>`;
+ let done=0;const fin=ok=>{if(done)return;done=1;clearInterval(iv);if(!ok){T.mood=C(T.mood-15);S.rep=C(S.rep-2)}app.innerHTML=`<div class="card">${ok?'Успел сбегать, никто не заметил.':'Не успел! Зал заскучал, арт-директор заметил. Настроение −15, репутация −2.'}</div><button onclick="setUI()">Дальше</button>`};
+ const iv=setInterval(()=>{if(Date.now()-t0>3500)fin(0)},100);
+ $('wt').onpointerdown=e=>{e.preventDefault();if(done)return;n++;$('wb').style.width=n/need*100+'%';try{tg.HapticFeedback.impactOccurred('light')}catch(x){}if(n>=need)fin(1)}}
+function finish(why){const t=T,c=t.c;T=null;let pay=c.pay,msg='';
+ const avg=t.ms.length?t.ms.reduce((a,b)=>a+b)/t.ms.length:t.mood;let g=0;
+ if(why=='abort'){pay=0;msg='Ты бросил сет. Оплаты нет.'}
+ else if(why=='fired'){pay=Math.round(pay*.3);msg='Зал опустел, тебя попросили уйти от пульта. Оплата только за часть ночи.'}
+ else{const sc=C(.8*avg+.2*C(t.ad)+R(-8,8));g=sc<25?0:sc<45?1:sc<65?2:sc<85?3:4;pay=Math.round(pay*GM[g])}
+ S.money+=pay;S.rep=C(S.rep+GREP[g]);S.fav=C(S.fav+GFAV[g]);S.vos=C(S.vos+GVOS[g]);if(S.skill<35)S.skill=C(S.skill+R(1,3));S.tired=C(S.tired+25);S.sets++;
+ if(t.late&&why!='abort'){if(Math.random()<(c.dg>=4?.5:.15)){S.hp=C(S.hp-20);S.rep=C(S.rep-5);msg+='<br>У выхода тебя подкараулила местная братва: драка. Здоровье −20, репутация −5.'}else{S.tired=C(S.tired+10);msg+='<br>После сета вы мило провели время. Усталость +10.'}}
+ if(t.dr>95){S.hp=C(S.hp-5);msg+='<br>Утро после: ты не помнишь, как добрался домой. Здоровье −5.'}
+ save();if(S.hp<=0)return end('hp');
+ app.innerHTML=`<div class="card"><h2>Оценка клуба: ${GR[g]}</h2><div>Оплата за ночь: ${pay.toLocaleString('ru')} ₽${t.tips?`<br>Чаевые: ${t.tips.toLocaleString('ru')} ₽`:''}${msg?'<br>'+msg:''}</div><div class="mu" style="margin-top:8px">Репутация ${GREP[g]>=0?'+':''}${GREP[g]} · любимчик ${GFAV[g]>=0?'+':''}${GFAV[g]} · навык растёт</div></div><button onclick="next('')">Домой спать</button>`}
+function end(k){const tx={quit:'Ты закрыл ноутбук и ушёл из диджеинга. Может, оно и к лучшему.',hp:'Здоровье кончилось. Ты больше не вышел за пульт.'}[k];
+ try{localStorage.removeItem(K)}catch(e){}try{tg.CloudStorage.removeItem(K)}catch(e){}
+ app.innerHTML=`<div class="card"><h2>Конец игры</h2><div>${tx}</div><div class="mu" style="margin-top:8px">Дней: ${S.day} · сетов: ${S.sets} · денег: ${S.money.toLocaleString('ru')} ₽</div></div><button onclick="S=null;boot()">Начать заново</button>`}
+function quit(){const m='Бросить карьеру диджея? Игра закончится.';if(tg&&tg.showConfirm)tg.showConfirm(m,ok=>{if(ok)end('quit')});else if(confirm(m))end('quit')}
+boot();
+</script></body></html>
